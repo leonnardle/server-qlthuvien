@@ -1,0 +1,35 @@
+@host=http://192.168.1.17:3000/user/login
+GET {{host}}
+Content-Type: application/json
+
+{
+   
+}
+
+### POST Request
+POST {{host}}
+Content-Type: application/json
+
+{
+  "email":"trungquocle635@gmail.com",
+  "password":"00000000"
+
+}
+
+### PUT Request
+PUT {{host}}
+Content-Type: application/json
+
+{
+   "maphieumuon":"1",
+   "ghichu":"s",
+    "masachList":[""]
+}
+
+### delete Request
+DELETE  {{host}}
+
+Content-Type: application/json
+{
+}
+
