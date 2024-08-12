@@ -13,9 +13,11 @@ router.route('/').get((req,res)=>{
         }
     });
 });
-router.post('/', async (req, res) => {
-    const { mapt, maphieumuon, ngaytra, ghichu, masachList } = req.body;
+const { randomCode } = require('../function/generationCode');
 
+router.post('/', async (req, res) => {
+    const {  maphieumuon, ngaytra, ghichu, masachList } = req.body;
+    const mapt=randomCode('PT',8);
     try {
         // Bắt đầu transaction
         await new Promise((resolve, reject) => {
@@ -71,8 +73,8 @@ router.post('/', async (req, res) => {
         // Thêm phiếu trả vào bảng phieutra
         await new Promise((resolve, reject) => {
             db.query(
-                'INSERT INTO phieutra (mapt, maphieumuon, ngaytra, trangthai, ghichu) VALUES (?, ?, ?, ?, ?)',
-                [mapt, maphieumuon, ngaytra, trangthai, ghichu],
+                'INSERT INTO phieutra ( mapt,maphieumuon, ngaytra, trangthai, ghichu) VALUES ( ?,?, ?, ?, ?)',
+                [ mapt,maphieumuon, ngaytra, trangthai, ghichu],
                 (error, results) => {
                     if (error) {
                         reject(error);
@@ -101,6 +103,23 @@ router.post('/', async (req, res) => {
         );
 
         await Promise.all(insertRelations);
+
+        // Cập nhật trạng thái sách về 0 khi sách đã được trả
+        await Promise.all(masachList.map(masach =>
+            new Promise((resolve, reject) => {
+                db.query(
+                    'UPDATE thongtinsach SET trangthai = 0 WHERE masach = ?',
+                    [masach],
+                    (error, results) => {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(results);
+                        }
+                    }
+                );
+            })
+        ));
 
         // Cập nhật trạng thái phiếu mượn
         await new Promise((resolve, reject) => {
@@ -146,6 +165,7 @@ router.post('/', async (req, res) => {
         res.status(500).json({ message: 'Lỗi khi thêm phiếu trả', error: error.message });
     }
 });
+
 
 router.delete('/:mapt', async (req, res) => {
     const { mapt } = req.params;
@@ -314,7 +334,7 @@ router.put('/:mapt', async (req, res) => {
 
         // Kiểm tra số lượng sách đã trả so với số lượng sách mượn
         const allBooksReturned = loanBooks.every(book => masachList.includes(book));
-        const trangthai = allBooksReturned ? 1 : 0;
+        const trangthai = allBooksReturned ? 1 : 0; // 1 nếu đã trả đủ sách, 0 nếu không
 
         // Cập nhật phiếu trả trong bảng phieutra
         await new Promise((resolve, reject) => {
@@ -365,6 +385,41 @@ router.put('/:mapt', async (req, res) => {
 
         await Promise.all(insertRelations);
 
+        // Cập nhật trạng thái sách đã trả
+        await Promise.all(masachList.map(masach =>
+            new Promise((resolve, reject) => {
+                db.query(
+                    'UPDATE thongtinsach SET trangthai = 0 WHERE masach = ?',
+                    [masach],
+                    (error, results) => {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(results);
+                        }
+                    }
+                );
+            })
+        ));
+
+        // Cập nhật trạng thái sách bị thiếu
+        const missingBooks = loanBooks.filter(book => !masachList.includes(book));
+        await Promise.all(missingBooks.map(masach =>
+            new Promise((resolve, reject) => {
+                db.query(
+                    'UPDATE thongtinsach SET trangthai = 1 WHERE masach = ?',
+                    [masach],
+                    (error, results) => {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(results);
+                        }
+                    }
+                );
+            })
+        ));
+
         // Cập nhật trạng thái phiếu mượn
         await new Promise((resolve, reject) => {
             db.query(
@@ -409,6 +464,8 @@ router.put('/:mapt', async (req, res) => {
         res.status(500).json({ message: 'Lỗi khi cập nhật phiếu trả', error: error.message });
     }
 });
+
+
 
 // lay danh sach sach tu phieu muon
 // router.get('/:maphieumuon/danhsachsachmuon',  (req, res) => {

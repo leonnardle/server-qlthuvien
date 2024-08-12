@@ -11,6 +11,7 @@ const bookRouter = require('./router/sach');
 const readerRouter = require('./router/docgia');
 const loanRouter = require('./router/phieumuon');
 const payRouter = require('./router/phieutra');
+const fakeloanRouter = require('./router/phieumuondangchoduyet');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/sach', bookRouter);
 app.use('/docgia', readerRouter);
 app.use('/phieumuon', loanRouter);
 app.use('/phieutra', payRouter);
+app.use('/phieumuondangchoduyet', fakeloanRouter);
 
 app.listen(3000, () => {
     console.log("Connected to server at port 3000");

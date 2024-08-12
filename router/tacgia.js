@@ -25,7 +25,7 @@ router.route('/').get((req, res) => {
 });
 
 router.post('/', (req, res) => {
-    const { matacgia, tentacgia, quoctich, tieusu, email, image } = req.body;
+    const {  tentacgia, quoctich, tieusu, email, image } = req.body;
 
     let imageBuffer = null;
     if (image) {
@@ -40,13 +40,13 @@ router.post('/', (req, res) => {
     }
 
     const sqlQuery = `
-        INSERT INTO tacgia (matacgia, tentacgia, quoctich, tieusu, email, image)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO tacgia ( tentacgia, quoctich, tieusu, email, image)
+        VALUES ( ?, ?, ?, ?, ?)
     `;
 
     db.query(
         sqlQuery,
-        [matacgia, tentacgia, quoctich, tieusu, email, imageBuffer],
+        [ tentacgia, quoctich, tieusu, email, imageBuffer],
         (error, data) => {
             if (error) {
                 console.error('Error inserting author:', error);

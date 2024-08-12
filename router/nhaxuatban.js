@@ -50,10 +50,10 @@ router.route('/').get((req,res)=>{
     });
 });
 router.post('/', (req, res) => {
-    const {manxb, tennxb,diachi,sdt } = req.body;
+    const { tennxb,diachi,sdt } = req.body;
 
-    var sqlQuery="INSERT INTO nhaxuatban(manxb, tennxb,diachi,sdt ) values(?,?,?,?)";
-    db.query(sqlQuery,[manxb, tennxb,diachi,sdt ], (error, data) => {
+    var sqlQuery="INSERT INTO nhaxuatban( tennxb,diachi,sdt ) values(?,?,?)";
+    db.query(sqlQuery,[ tennxb,diachi,sdt ], (error, data) => {
         if (error) {
             res.status(500).json({ success: false, message: error.message,data });
         } else {

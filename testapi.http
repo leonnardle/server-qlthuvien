@@ -1,4 +1,4 @@
-@host=http://192.168.1.17:3000/user/login
+@host=http://192.168.1.17:3000/user/reset-password
 GET {{host}}
 Content-Type: application/json
 
@@ -11,9 +11,9 @@ POST {{host}}
 Content-Type: application/json
 
 {
-  "email":"trungquocle635@gmail.com",
-  "password":"00000000"
-
+   "madocgia": "DG0639",  // Mã độc giả, lấy từ nơi bạn đã xác định
+    "ngaymuon": null,
+    "masachList": ["1","2"] // Danh
 }
 
 ### PUT Request

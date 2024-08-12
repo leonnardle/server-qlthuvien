@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-
 router.route('/').get((req, res) => {
     const sqlQuery = "SELECT * FROM thongtinsach";
     db.query(sqlQuery, (error, data) => {
@@ -12,13 +11,10 @@ router.route('/').get((req, res) => {
             const results = data.map(row => ({
                 masach: row.masach,
                 tensach: row.tensach,
-                matg: row.matg,
-                manxb : row.manxb ,
-                maloai: row.maloai,
                 mota : row.mota ,
+                trangthai:row.trangthai,
                 // Chuyển đổi hình ảnh sang base64
                 hinhanh: row.hinhanh ? row.hinhanh.toString('base64') : null,
-                soluong: row.soluong
             }));
 
             res.json({ message: "success", data: results });
@@ -26,8 +22,14 @@ router.route('/').get((req, res) => {
     });
 });
 
+const { randomCode } = require('../function/generationCode');
+
 router.post('/', async (req, res) => {
-    const { masach, tensach, mota, hinhanh, soluong, manxbList, maloaiList,matacgiaList } = req.body;
+    const { tensach, mota, hinhanh, manxbList, maloaiList, matacgiaList } = req.body;
+
+    // Tạo mã sách ngẫu nhiên
+    const masach = randomCode('SACH',6);
+    console.log('Generated masach:', masach); // Kiểm tra giá trị masach
 
     let imageBuffer = null;
     if (hinhanh) {
@@ -42,19 +44,24 @@ router.post('/', async (req, res) => {
     }
 
     const insertBookQuery = `
-        INSERT INTO thongtinsach (masach, tensach, mota, hinhanh, soluong)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO thongtinsach (masach, tensach, mota, hinhanh)
+        VALUES (?, ?, ?, ?)
     `;
 
     try {
         // Bắt đầu transaction
-        db.query('START TRANSACTION');
+        await new Promise((resolve, reject) => {
+            db.query('START TRANSACTION', (error) => {
+                if (error) return reject(error);
+                resolve();
+            });
+        });
 
         // Thêm sách vào bảng thongtinsach
         await new Promise((resolve, reject) => {
             db.query(
                 insertBookQuery,
-                [masach, tensach, mota, imageBuffer, soluong],
+                [masach, tensach, mota, imageBuffer],
                 (error, results) => {
                     if (error) {
                         reject(error);
@@ -64,6 +71,7 @@ router.post('/', async (req, res) => {
                 }
             );
         });
+
         // Thêm mối quan hệ sách-nxb vào bảng sach_nhaxuatban
         const insertRelations = manxbList.map(manxb =>
             new Promise((resolve, reject) => {
@@ -80,6 +88,7 @@ router.post('/', async (req, res) => {
                 );
             })
         );
+
         // Thêm mối quan hệ sách-loaisach vào bảng sach_loaisach
         const insertLoaisachRelations = maloaiList.map(maloai =>
             new Promise((resolve, reject) => {
@@ -112,41 +121,71 @@ router.post('/', async (req, res) => {
                 );
             })
         );
+
         // Chờ tất cả các Promise hoàn thành
-        await Promise.all([...insertRelations, ...insertLoaisachRelations,
-            ...insertTacgiaRelations]);
+        await Promise.all([...insertRelations, ...insertLoaisachRelations, ...insertTacgiaRelations]);
 
         // Commit transaction
-        db.query('COMMIT');
+        await new Promise((resolve, reject) => {
+            db.query('COMMIT', (error) => {
+                if (error) return reject(error);
+                resolve();
+            });
+        });
+
         res.status(200).json({ message: 'Book added successfully' });
 
     } catch (error) {
         // Rollback transaction in case of error
-        db.query('ROLLBACK');
+        await new Promise((resolve, reject) => {
+            db.query('ROLLBACK', (error) => {
+                if (error) return reject(error);
+                resolve();
+            });
+        });
+
         console.error('Error inserting book and relationships:', error);
         res.status(500).json({ message: 'Error inserting book and relationships', error: error.message });
     }
 });
 
-router.delete('/:masach',(req,res)=>{
-    const {masach}=req.params;
-    var sqlQuery="delete from thongtinsach where masach=?";
-    db.query(sqlQuery,masach,(error,data)=>{
-        if(error){
-            res.status(500).json({message:error.message});
-        }else if(data.affectedRows ===0){
-            res.status(404).json({ success: false, message: 'Không tìm thấy sách nào với mã này', data });
-        }
-        else{
-            res.json({message:"xoa thanh cong"})
+router.delete('/:masach', (req, res) => {
+    const { masach } = req.params;
+
+    // Câu lệnh kiểm tra sách có trong phiếu mượn hay không
+    const checkSachSql = 
+        "SELECT * FROM phieumuon_sach pms JOIN phieumuon pm ON pms.maphieumuon = pm.mapm WHERE pms.masach = ? AND pm.trangthai = 0";
+
+    // Câu lệnh xóa sách
+    const sqlQuery = "DELETE FROM thongtinsach WHERE masach = ?";
+
+    // Kiểm tra xem sách có trong phiếu mượn không
+    db.query(checkSachSql, [masach], (error, data) => {
+        if (error) {
+            return res.status(500).send({ success: false, message: 'Lỗi khi kết nối DB: ' + error.message });
         }
 
+        // Nếu sách tồn tại trong phiếu mượn
+        if (data.length > 0) {
+            return res.status(400).send({ success: false, message: 'Không thể xóa vì nó tồn tại trong 1 phiếu mượn.' });
+        } else {
+            // Nếu không tồn tại trong phiếu mượn, tiến hành xóa
+            db.query(sqlQuery, [masach], (error, data) => {
+                if (error) {
+                    res.status(500).json({ message: error.message });
+                } else if (data.affectedRows === 0) {
+                    res.status(404).json({ success: false, message: 'Không tìm thấy sách nào với mã này', data });
+                } else {
+                    res.json({ message: "Xóa thành công" });
+                }
+            });
+        }
     });
-
 });
+
 router.put('/:masach', async (req, res) => {
     const { masach } = req.params;
-    const { tensach, mota, hinhanh, soluong, manxbList, maloaiList, matacgiaList } = req.body;
+    const { tensach, mota, hinhanh, manxbList, maloaiList, matacgiaList } = req.body;
 
     let imageBuffer = null;
     if (hinhanh) {
@@ -162,7 +201,7 @@ router.put('/:masach', async (req, res) => {
 
     const updateBookQuery = `
         UPDATE thongtinsach
-        SET tensach = ?, mota = ?, hinhanh = ?, soluong = ?
+        SET tensach = ?, mota = ?, hinhanh = ?
         WHERE masach = ?
     `;
 
@@ -179,7 +218,7 @@ router.put('/:masach', async (req, res) => {
         await new Promise((resolve, reject) => {
             db.query(
                 updateBookQuery,
-                [tensach, mota, imageBuffer, soluong, masach],
+                [tensach, mota, imageBuffer, masach],
                 (error, results) => {
                     if (error) {
                         reject(error);
@@ -420,4 +459,6 @@ router.get('/:bookId',  (req, res) => {
         res.status(500).json({ error: 'Không nạp được danh sách loai sach' });
     }
 });
+
+
 module.exports = router;

@@ -27,18 +27,32 @@ router.post('/', (req, res) => {
 });
 router.delete('/:maloai',(req,res)=>{
     const {maloai}=req.params;
+    var CheckLoaisqlQuery="select * from sach_loaisach where maloai=?";
     var sqlQuery="delete from loaisach where maloai=?";
-    db.query(sqlQuery,maloai,(error,data)=>{
+
+    db.query(CheckLoaisqlQuery,maloai,(error,data)=>{
         if(error){
             res.status(500).json({message:error.message});
-        }else if(data.affectedRows ===0){
-            res.status(404).json({ success: false, message: 'Không tìm thấy loại sách với mã loại này', data });
+        }
+        if(data.length>0){
+            return res.status(400).send({ success: false, message: 'không thể xóa vì có sách chứa mã loại này' });
         }
         else{
-            res.json({message:"xoa thanh cong"})
+            db.query(sqlQuery,maloai,(error,data)=>{
+                if(error){
+                    res.status(500).json({message:error.message});
+                }else if(data.affectedRows ===0){
+                    res.status(404).json({ success: false, message: 'Không tìm thấy loại sách với mã loại này', data });
+                }
+                else{
+                    res.json({message:"xoa thanh cong"})
+                }
+        
+            });
         }
 
     });
+  
 
 });
 router.put('/', (req, res) => {
