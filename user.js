@@ -25,7 +25,7 @@ function generateMadocgia() {
 router.post('/forgot-password', (req, res) => {
     const { email } = req.body;
     const token = crypto.randomBytes(32).toString('hex'); 
-    const expires = Date.now() + 3600000; // Token hết hạn sau 1 giờ
+    const expires = new Date(Date.now() + 3600000).toISOString().slice(0, 19).replace('T', ' '); //  cho nó hết trong 1 tiếng
 
     // Lưu token và thời gian hết hạn vào cơ sở dữ liệu
     const sqlQuery = "UPDATE taikhoan SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE email = ?";
@@ -88,34 +88,45 @@ router.get('/reset-password/:token', async (req, res) => {
     const token = req.params.token;
     const currentTime = Date.now();
 
-    const sqlQuery = "SELECT * FROM taikhoan WHERE resetPasswordToken = ? AND resetPasswordExpires > ?";
-    db.query(sqlQuery, [token, currentTime], async (error, data) => {
+    const sqlQuery = "SELECT * FROM taikhoan WHERE resetPasswordToken = ?";
+    db.query(sqlQuery, [token], async (error, data) => {
         if (error) {
             return res.status(500).send('Database error: ' + error.message);
         }
 
         if (data.length > 0) {
-            // Token hợp lệ và chưa hết hạn
             const user = data[0];
-            const newPassword = generateRandomPassword(); // Tạo mật khẩu ngẫu nhiên
-            const hashedPassword = await bcrypt.hash(newPassword, 10); // Mã hóa mật khẩu mới
+            const resetPasswordExpires = new Date(user.resetPasswordExpires).getTime(); // Chuyển đổi thời gian từ cơ sở dữ liệu thành timestamp
+            
+            // In ra các thời gian để kiểm tra
+            console.log("Current Time:", currentTime);
+            console.log("Reset Password Expires Time:", resetPasswordExpires);
+            
+            if (resetPasswordExpires > currentTime) {
+                // Token hợp lệ và chưa hết hạn
+                const newPassword = generateRandomPassword(); // Tạo mật khẩu ngẫu nhiên
+                const hashedPassword = await bcrypt.hash(newPassword, 10); // Mã hóa mật khẩu mới
 
-            // Cập nhật mật khẩu mới vào cơ sở dữ liệu
-            const sqlUpdate = "UPDATE taikhoan SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE email = ?";
-            db.query(sqlUpdate, [hashedPassword, user.email], (updateError) => {
-                if (updateError) {
-                    return res.status(500).send('Database error: ' + updateError.message);
-                }
+                // Cập nhật mật khẩu mới vào cơ sở dữ liệu
+                const sqlUpdate = "UPDATE taikhoan SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE email = ?";
+                db.query(sqlUpdate, [hashedPassword, user.email], (updateError) => {
+                    if (updateError) {
+                        return res.status(500).send('Database error: ' + updateError.message);
+                    }
 
-                // Gửi mật khẩu mới qua email
-                sendNewPasswordEmail(user.email, newPassword);
-                res.send('Mật khẩu mới đã được gửi đến email của bạn.');
-            });
+                    // Gửi mật khẩu mới qua email
+                    sendNewPasswordEmail(user.email, newPassword);
+                    res.send('Mật khẩu mới đã được gửi đến email của bạn.');
+                });
+            } else {
+                res.status(400).send('Token không hợp lệ hoặc đã hết hạn.');
+            }
         } else {
             res.status(400).send('Token không hợp lệ hoặc đã hết hạn.');
         }
     });
 });
+
 
 router.route('/login').post(async (req, res) => {
     const { email, password } = req.body;

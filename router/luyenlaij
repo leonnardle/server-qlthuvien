@@ -1,0 +1,33 @@
+// cú pháp dùng promise để chờ các thao tác bất đồng bộ sau đó 
+// nó sẽ trả 1 bản ghi hoàn chỉnh nếu trong các promise truyền vào bị lỗi thì sẽ dừng luôn
+await Promise.all(array.map(async(items)=>{
+    new Promise((resolve,reject)=>{
+        db.query('cautruyvan','thamsotruyenvo',(error ,result)=>{
+            if (error){
+                reject();
+            }else{
+                resolve();
+            }
+        });
+    })
+}));
+
+// tao 1 transaction
+await new Promise((resolve, reject)=>{
+    db.query('START TRANSACTION',(error)=>{
+        if (error) 
+            reject(error);
+        else 
+            resolve(result);
+        // resolve(); 
+
+    });
+});
+await new Promise((resolve, reject)=>{
+    db.query('ROLLBACK',(error)=>{
+        if (error) 
+            reject(error);
+        else 
+            resolve();
+    });
+});

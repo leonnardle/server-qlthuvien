@@ -5,7 +5,6 @@ var db=require('../db');
 // ham them phieu muon
 const { addPhieuMuon } = require('../function/addphieumuonService'); 
 
-
 router.route('/').get((req,res)=>{
     //nhan tham so
     var sqlQuery="select * from phieumuon";
@@ -20,11 +19,19 @@ router.route('/').get((req,res)=>{
 router.post('/', async (req, res) => {
     const { madocgia, ngaymuon, masachList } = req.body;
 
+    await new Promise((resolve, reject) => {
+        db.query('START TRANSACTION', (error) => {
+            if (error) 
+                reject(error);
+            else 
+                resolve();
+        });
+    });
     try {
         await addPhieuMuon( madocgia, ngaymuon, masachList);
         res.status(200).json({ message: 'Borrowing successfully created' });
     } catch (error) {
-        // Rollback transaction in case of error
+        // Rollback khi lỗi
         await new Promise((resolve, reject) => {
             db.query('ROLLBACK', (error) => {
                 if (error) reject(error);
@@ -61,9 +68,8 @@ router.delete('/:mapm', async (req, res) => {
                 }
             });
         });
-
+        // Nếu phiếu mượn không tồn tại, không cho phép xóa => ROLLBACK liền
         if (checkResults[0].count === 0) {
-            // Nếu phiếu mượn không tồn tại, không cho phép xóa
             await new Promise((resolve, reject) => {
                 db.query('ROLLBACK', (error) => {
                     if (error) {

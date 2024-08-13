@@ -20,9 +20,16 @@ router.get('/', async (req, res) => {
 // Thêm một độc giả mới
 router.post('/', async (req, res) => {
     try {
+        // chắc chắn rằng email không bị trùng
         const {  tendocgia, email, sdt } = req.body;
         const checkEmailQuery = "SELECT COUNT(*) AS count FROM docgia WHERE email = ?";
+        // check email trong table tai khoản. không được trùng vì người dùng này đã có tài khoản rồi
+        const checkEmailQueryTaikhoan = "SELECT COUNT(*) AS count FROM taikhoan WHERE email = ?";
+        const [emailCheckResultTaikhoan] = await query(checkEmailQueryTaikhoan, [email]);
         const [emailCheckResult] = await query(checkEmailQuery, [email]);
+        if (emailCheckResultTaikhoan.count > 0) {
+            return res.status(400).json({ success: false, message: 'Email đã tồn tại trong hệ thống (bảng tài khoản)!' });
+        }
         if (emailCheckResult.count > 0) {
             return res.status(400).json({ success: false, message: 'Email đã tồn tại trong hệ thống!' });
         }
@@ -66,6 +73,7 @@ router.put('/:madocgia', async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 });
+// lấy thông tin của 1 độc giả
 router.route('/:madocgia').get((req, res) => {
     // Nhận tham số
     const { madocgia } = req.params; 
@@ -81,6 +89,7 @@ router.route('/:madocgia').get((req, res) => {
     });
 });
 // Kiểm tra xem độc giả có tồn tại hay không khi thêm sách
+// router lấy danh sách các phiếu mượn và trả của đọc giả
 router.get('/laydanhsach/:madocgia', async (req, res) => {
     try {
         const readerId = req.params.madocgia;
@@ -94,24 +103,39 @@ router.get('/laydanhsach/:madocgia', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Độc giả không tồn tại' });
         }
 
-        // Lấy danh sách phiếu mượn liên quan đến độc giả
-        // sau đó lấy danh sách sách chưa trả trên từng phiếu rồi cập nhật nó cho borrowRecordsQuery
-        const borrowRecordsQuery = "SELECT pm.*,pt.ngaytra from phieumuon pm LEFT JOIN phieutra pt on pt.maphieumuon=pm.mapm";
+        // Truy vấn lấy danh sách phiếu mượn và ngày trả liên quan đến độc giả
+        const borrowRecordsQuery = `
+            SELECT pm.*, pt.ngaytra 
+            FROM phieumuon pm 
+            LEFT JOIN phieutra pt ON pt.maphieumuon = pm.mapm 
+            WHERE pm.madocgia = ?`;
         const borrowRecords = await query(borrowRecordsQuery, [readerId]);
 
+        // Ánh xạ kết quả để lấy thông tin hoàn chỉnh
         const detailedRecords = await Promise.all(borrowRecords.map(async (record) => {
-            const { mapm, ngaymuon,ngaytra } = record;
+            const { mapm, ngaymuon, ngaytra } = record;
 
-            // Kiểm tra sách đã trả chưa
-            const returnRecordsQuery = "SELECT * FROM phieutra WHERE maphieumuon = ?";
+            // Kiểm tra có phiếu trả nào không và trạng thái của nó
+            const returnRecordsQuery = `
+                SELECT * FROM phieutra 
+                WHERE maphieumuon = ? AND trangthai = 1`;
             const returnRecords = await query(returnRecordsQuery, [mapm]);
             const booksReturned = returnRecords.length > 0;
 
-            // Lấy danh sách sách trả thiếu
+            // Lấy danh sách sách chưa được trả của 1 phiếu mượn
+            //b1 . lấy danh sách sách của phiếu trả cụ thể trong phieutra_sach
+            //b2 kiểm tra danh sách trong phieumuon_sach
             const booksMissingQuery = `
-                SELECT masach FROM phieumuon_sach WHERE maphieumuon = ? AND masach NOT IN (
-                    SELECT masach FROM phieutra WHERE maphieumuon = ?
-                )`;
+            SELECT ps.masach 
+            FROM phieumuon_sach ps 
+            WHERE ps.maphieumuon = ? 
+            AND ps.masach NOT IN (
+                SELECT pts.masach 
+                FROM phieutra pt 
+                JOIN phieutra_sach pts ON pt.mapt = pts.maphieutra 
+                WHERE pt.maphieumuon = ? 
+            )`;
+        
             const missingBooks = await query(booksMissingQuery, [mapm, mapm]);
 
             return {
@@ -134,4 +158,5 @@ router.get('/laydanhsach/:madocgia', async (req, res) => {
         res.status(500).json({ success: false, message: 'Lỗi server', error: error.message });
     }
 });
+
 module.exports = router;
