@@ -1,4 +1,4 @@
-const { sendPasswordResetEmail } = require('./emailService'); // Đảm bảo thay thế đúng đường dẫn tới module của bạn
+const { sendPasswordResetEmail } = require('./emailService'); // Đảm bảo thay thế đúng đường dẫn tới module của 
 const crypto = require('crypto');
 
 // Hàm tạo token ngẫu nhiên
